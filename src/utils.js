@@ -3,11 +3,14 @@ import path from 'path';
 import https from 'https';
 import child_process from 'child_process';
 import { rimrafSync, copydirSync } from 'sander';
+import Netrc from 'netrc';
+import { URL } from 'url';
 
 const tmpDirName = 'tmp';
 const degitConfigName = 'degit.json';
 
 export { degitConfigName };
+const netrc = Netrc();
 
 export class DegitError extends Error {
 	constructor(message, opts) {
@@ -55,8 +58,28 @@ export function mkdirp(dir) {
 
 export function fetch(url, dest) {
 	return new Promise((fulfil, reject) => {
+		let hostname = null;
+		try {
+			hostname = new URL(url).hostname;
+		} catch (err) {
+			reject(err);
+		}
+
+		const options = {};
+
+		if (netrc[hostname]) {
+			const auth = Buffer.from(
+				[netrc[hostname].login, netrc[hostname].password].join(':'),
+				'utf8'
+			).toString('base64');
+			const authorization = ['Basic', auth].join(' ');
+			options.headers = {
+				authorization,
+			};
+		}
+
 		https
-			.get(url, response => {
+			.get(url, options, response => {
 				const code = response.statusCode;
 				if (code >= 400) {
 					reject({ code, message: response.statusMessage });
